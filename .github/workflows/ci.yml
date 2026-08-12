@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install Compact
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/midnightntwrk/compact/releases/latest/download/compact-installer.sh | sh
+      - name: Select Compact compiler
+        run: ~/.local/bin/compact update 0.31.1
+      - run: npm ci
+      - name: Compile circuits
+        run: ~/.local/bin/compact compile contract/kinproof.compact contract/managed/kinproof
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run build
+
