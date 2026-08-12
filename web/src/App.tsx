@@ -1,449 +1,336 @@
-/**
- * Midnight Leaderboard — React Web Interface
- *
- * Auto-loads the default leaderboard contract on startup.
- * Reads scores from the Preprod indexer (no wallet needed).
- * Score submission via Lace DApp Connector (wallet required).
- */
-
-import { useState, useEffect, useCallback, useRef } from 'react';
-import type { InitialAPI, ConnectedAPI } from '@midnight-ntwrk/dapp-connector-api';
-import { useLeaderboard } from './hooks/useLeaderboard';
-import { BrowserLeaderboardManager } from './contexts/BrowserLeaderboardManager';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ConnectedAPI, InitialAPI } from '@midnight-ntwrk/dapp-connector-api';
+import type { RecoveryChecklist } from '../../contract/src/index.js';
+import { BrowserKinproofManager, connectToWallet } from './contexts/BrowserKinproofManager.js';
+import type { KinproofAPI } from '../../api/src/index.js';
+import { useKinproofState } from './hooks/useKinproofState.js';
 import pino from 'pino';
 
 const NETWORK_ID = import.meta.env.VITE_NETWORK_ID ?? 'preprod';
 const DEFAULT_CONTRACT = import.meta.env.VITE_DEFAULT_CONTRACT ?? '';
 
-enum DisplayMode { PUBLIC = 0, ANONYMOUS = 1, CUSTOM = 2 }
+type WalletStatus = 'detecting' | 'missing' | 'ready' | 'connecting' | 'connected';
+type CircuitAction = 'seal' | 'refresh' | 'revoke';
+type ActionPhase = 'idle' | 'joining' | 'proving' | 'submitting' | 'confirmed';
 
-type WalletState = 'detecting' | 'no-wallet' | 'ready' | 'connecting' | 'connected';
+const CHECKS: ReadonlyArray<{
+  key: keyof RecoveryChecklist;
+  title: string;
+  detail: string;
+}> = [
+  { key: 'offlineBackup', title: 'Offline backup exists', detail: 'Recovery material is stored away from connected devices.' },
+  { key: 'testedRecovery', title: 'Recovery was tested', detail: 'The process was rehearsed without moving real funds.' },
+  { key: 'trustedContact', title: 'A trusted person is prepared', detail: 'Someone knows how to begin, but not the private details.' },
+  { key: 'deviceAccessPlan', title: 'Device access is covered', detail: 'Locked devices and required credentials have a safe path.' },
+  { key: 'currentInstructions', title: 'Instructions are current', detail: 'Networks, accounts, and locations were checked recently.' },
+];
 
-function findWallet(): InitialAPI | undefined {
-  const midnight = (window as any).midnight;
-  if (!midnight) return undefined;
-  return Object.values(midnight).find(
-    (w): w is InitialAPI => !!w && typeof w === 'object' && 'apiVersion' in w,
+const emptyChecklist = (): RecoveryChecklist => ({
+  offlineBackup: false,
+  testedRecovery: false,
+  trustedContact: false,
+  deviceAccessPlan: false,
+  currentInstructions: false,
+});
+
+const truncate = (value: string, start = 10, end = 8) =>
+  value.length <= start + end + 1 ? value : `${value.slice(0, start)}…${value.slice(-end)}`;
+
+const getInjectedWallet = (): InitialAPI | undefined => {
+  if (!window.midnight) return undefined;
+  return Object.values(window.midnight).find(
+    (candidate): candidate is InitialAPI => Boolean(
+      candidate && typeof candidate === 'object' && 'apiVersion' in candidate,
+    ),
   );
-}
+};
 
-function truncAddr(addr: string): string {
-  return addr.length <= 24 ? addr : `${addr.slice(0, 14)}…${addr.slice(-8)}`;
-}
-
-function fmtScore(n: bigint | number): string {
-  return Number(n).toLocaleString();
-}
-
-async function copyToClipboard(text: string): Promise<boolean> {
-  try { await navigator.clipboard.writeText(text); return true; }
-  catch { return false; }
-}
-
-function friendlyError(e: any): string {
-  // Extract message from nested Effect-TS FiberFailure errors
-  const msg = extractErrorMessage(e);
-  if (msg.includes('User rejected')) return 'Transaction cancelled.';
-  if (msg.includes('not the owner')) return 'This entry does not belong to your wallet.';
-  if (msg.includes('entry not found')) return 'Entry not found on the leaderboard.';
-  if (msg.includes('Failed to fetch') || msg.includes('Failed Proof Server')) return 'Could not reach the proof server. Check your connection and try again.';
-  if (msg.includes('mismatched verifier keys')) return 'Contract version mismatch. Try deploying a new leaderboard.';
-  if (msg.includes('not authorized')) return 'Wallet connection was rejected. Try connecting again.';
-  if (msg.includes('insufficient') || msg.includes('DUST')) return 'Insufficient funds. Request tokens from the Preprod faucet.';
-  if (msg.includes('Network ID')) return 'Network configuration error. Make sure Lace is set to Preprod.';
-  if (msg.includes('submission') || msg.includes('Submission')) return 'Transaction failed to submit. Please try again.';
-  return msg || 'An unexpected error occurred. Check the browser console for details.';
-}
-
-function extractErrorMessage(e: any): string {
-  if (!e) return '';
-  // Direct message
-  if (e.message && e.message !== '') return e.message;
-  // Effect-TS FiberFailure: error.cause.failure.message or .cause.message
-  const failure = e?.cause?.failure;
-  if (failure?.message) return failure.message;
-  if (failure?.cause?.message) return failure.cause.message;
-  // Nested cause chain
-  if (e?.cause?.message) return e.cause.message;
-  // Stringify as last resort
-  try { return JSON.stringify(e); } catch { return String(e); }
-}
+const friendlyError = (cause: unknown): string => {
+  const message = cause instanceof Error ? cause.message : String(cause);
+  if (/reject|cancel/i.test(message)) return 'The wallet request was cancelled.';
+  if (/DUST|insufficient/i.test(message)) return 'This wallet needs Preprod tNIGHT. Fund it from the faucet and retry.';
+  if (/proof server|fetch/i.test(message)) return 'The proof service could not be reached. Check Lace’s Midnight settings.';
+  if (/already has a seal/i.test(message)) return 'This private plan already has a Kinproof seal.';
+  if (/seal not found/i.test(message)) return 'No seal controlled by this browser secret was found.';
+  return message || 'The circuit could not be completed.';
+};
 
 export default function App() {
-  const [walletState, setWalletState] = useState<WalletState>('detecting');
-  const [walletAPI, setWalletAPI] = useState<InitialAPI | undefined>();
+  const [walletStatus, setWalletStatus] = useState<WalletStatus>('detecting');
   const [wallet, setWallet] = useState<ConnectedAPI | null>(null);
-  const [address, setAddress] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
+  const [address, setAddress] = useState('');
+  const [checklist, setChecklist] = useState<RecoveryChecklist>(emptyChecklist);
   const [contractAddress, setContractAddress] = useState(DEFAULT_CONTRACT);
-  const [joinInput, setJoinInput] = useState('');
-  const [showJoinPanel, setShowJoinPanel] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [deploying, setDeploying] = useState(false);
+  const [phase, setPhase] = useState<ActionPhase>('idle');
+  const [currentAction, setCurrentAction] = useState<CircuitAction>('seal');
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [localSealState, setLocalSealState] = useState<'none' | 'active' | 'revoked'>(() => {
+    if (typeof window === 'undefined') return 'none';
+    return (localStorage.getItem('kinproof-local-seal-state') as 'active' | 'revoked' | null) ?? 'none';
+  });
 
-  const [clicks, setClicks] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(10);
-  const [showResult, setShowResult] = useState(false);
-  const [lastScore, setLastScore] = useState(0);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const clickRef = useRef(0);
+  const manager = useRef<BrowserKinproofManager | null>(null);
+  if (!manager.current) {
+    manager.current = new BrowserKinproofManager(pino({ level: 'warn', browser: { asObject: true } }));
+  }
 
-  const [displayMode, setDisplayMode] = useState<DisplayMode>(DisplayMode.ANONYMOUS);
-  const [customName, setCustomName] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [submitStatus, setSubmitStatus] = useState<string | null>(null);
-  const [verifyingId, setVerifyingId] = useState<number | null>(null);
-  const [verifiedIds, setVerifiedIds] = useState<Set<number>>(new Set());
+  const { state: publicState, loading: stateLoading, error: stateError, refresh } =
+    useKinproofState(contractAddress || null);
 
-  const managerRef = useRef<BrowserLeaderboardManager | null>(null);
-
-  const getManager = useCallback(() => {
-    if (!managerRef.current) {
-      const logger = pino({ level: 'warn', browser: { asObject: true } });
-      managerRef.current = new BrowserLeaderboardManager(logger);
-    }
-    return managerRef.current;
-  }, []);
-
-  const { entries: leaderboardEntries, refresh: refreshLeaderboard } = useLeaderboard(contractAddress || null);
-  const leaderboard = leaderboardEntries.map((e, i) => ({
-    rank: i + 1, id: e.id, displayName: e.displayName, score: BigInt(e.score),
-  }));
-
-  // ── Wallet detection ─────────────────────────────────────────────────
+  const completed = useMemo(
+    () => CHECKS.filter(({ key }) => checklist[key]).length,
+    [checklist],
+  );
+  const allReady = completed === CHECKS.length;
+  const isBusy = phase !== 'idle' && phase !== 'confirmed';
 
   useEffect(() => {
-    const found = findWallet();
-    if (found) { setWalletAPI(found); setWalletState('ready'); return; }
+    const detected = getInjectedWallet();
+    if (detected) { setWalletStatus('ready'); return; }
     let elapsed = 0;
-    const t = setInterval(() => {
-      elapsed += 100;
-      const w = findWallet();
-      if (w) { setWalletAPI(w); setWalletState('ready'); clearInterval(t); }
-      else if (elapsed >= 5_000) { setWalletState('no-wallet'); clearInterval(t); }
-    }, 100);
-    return () => clearInterval(t);
+    const timer = window.setInterval(() => {
+      elapsed += 150;
+      if (getInjectedWallet()) {
+        setWalletStatus('ready');
+        window.clearInterval(timer);
+      } else if (elapsed >= 4_500) {
+        setWalletStatus('missing');
+        window.clearInterval(timer);
+      }
+    }, 150);
+    return () => window.clearInterval(timer);
   }, []);
-
-  // ── Wallet connect ───────────────────────────────────────────────────
 
   const connect = useCallback(async () => {
-    if (!walletAPI) return;
-    setWalletState('connecting');
+    setWalletStatus('connecting');
     setError(null);
     try {
-      const c = await walletAPI.connect(NETWORK_ID);
-      setWallet(c);
-      const { unshieldedAddress } = await c.getUnshieldedAddress();
+      const connected = await connectToWallet(NETWORK_ID);
+      const { unshieldedAddress } = await connected.getUnshieldedAddress();
+      setWallet(connected);
       setAddress(unshieldedAddress);
-      setWalletState('connected');
-    } catch (e) {
-      setError(friendlyError(e));
-      setWalletState('ready');
+      setWalletStatus('connected');
+    } catch (cause) {
+      setError(friendlyError(cause));
+      setWalletStatus(getInjectedWallet() ? 'ready' : 'missing');
     }
-  }, [walletAPI]);
-
-  // ── Deploy new contract ──────────────────────────────────────────────
-
-  const deployContract = useCallback(async () => {
-    if (!wallet) return;
-    setDeploying(true);
-    setError(null);
-    try {
-      const manager = getManager();
-      const deployment$ = manager.resolve();
-      const result = await new Promise<any>((resolve, reject) => {
-        const sub = deployment$.subscribe((d) => {
-          if (d.status === 'deployed') { Promise.resolve().then(() => sub.unsubscribe()); resolve(d); }
-          if (d.status === 'failed') { Promise.resolve().then(() => sub.unsubscribe()); reject(d.error); }
-        });
-      });
-      setContractAddress(result.api.deployedContractAddress);
-      setShowJoinPanel(false);
-      setClicks(0); setShowResult(false);
-      await copyToClipboard(result.api.deployedContractAddress);
-    } catch (e: any) {
-      setError(friendlyError(e));
-    } finally {
-      setDeploying(false);
-    }
-  }, [wallet]);
-
-  // ── Join contract ────────────────────────────────────────────────────
-
-  const joinContract = useCallback(() => {
-    const addr = joinInput.trim();
-    if (!addr) return;
-    if (!/^[0-9a-fA-F]{64}$/.test(addr)) {
-      setError('Invalid contract address. Must be 64 hex characters.');
-      return;
-    }
-    setContractAddress(addr);
-    setShowJoinPanel(false); setJoinInput('');
-    setClicks(0); setShowResult(false);
-  }, [joinInput]);
-
-  // ── Copy address ─────────────────────────────────────────────────────
-
-  const handleCopy = useCallback(async () => {
-    if (!contractAddress) return;
-    if (await copyToClipboard(contractAddress)) {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  }, [contractAddress]);
-
-  // ── Game logic ───────────────────────────────────────────────────────
-
-  const startGame = useCallback(() => {
-    setClicks(0); clickRef.current = 0;
-    setTimeLeft(10); setIsPlaying(true); setShowResult(false);
-    timerRef.current = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) {
-          clearInterval(timerRef.current!);
-          setIsPlaying(false); setShowResult(true);
-          setLastScore(clickRef.current);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1_000);
   }, []);
 
-  const handleClick = useCallback(() => {
-    if (!isPlaying) return;
-    clickRef.current += 1;
-    setClicks(clickRef.current);
-  }, [isPlaying]);
+  const disconnect = useCallback(() => {
+    setWallet(null);
+    setAddress('');
+    setWalletStatus(getInjectedWallet() ? 'ready' : 'missing');
+    setNotice('Disconnected from this page. Revoke persistent access from Lace settings if needed.');
+  }, []);
 
-  useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
-
-  // ── Submit score ─────────────────────────────────────────────────────
-
-  const submitScore = useCallback(async () => {
-    if (lastScore === 0 || !wallet) return;
-    setSubmitting(true);
-    setSubmitStatus('Joining contract…');
-    setError(null);
-    try {
-      const manager = getManager();
-      const deployment$ = manager.resolve(contractAddress as any);
-      const result = await new Promise<any>((resolve, reject) => {
-        const sub = deployment$.subscribe((d) => {
-          if (d.status === 'deployed') { Promise.resolve().then(() => sub.unsubscribe()); resolve(d); }
-          if (d.status === 'failed') { Promise.resolve().then(() => sub.unsubscribe()); reject(d.error); }
-        });
+  const resolveApi = useCallback((): Promise<KinproofAPI> => {
+    setPhase('joining');
+    return new Promise((resolve, reject) => {
+      const observable = manager.current!.resolve(contractAddress || undefined);
+      const subscription = observable.subscribe((deployment) => {
+        if (deployment.status === 'deployed') {
+          if (!contractAddress) setContractAddress(deployment.api.deployedContractAddress);
+          queueMicrotask(() => subscription.unsubscribe());
+          resolve(deployment.api);
+        } else if (deployment.status === 'failed') {
+          queueMicrotask(() => subscription.unsubscribe());
+          reject(deployment.error);
+        }
       });
-      setSubmitStatus('Generating proof & submitting…');
-      const name = displayMode === DisplayMode.PUBLIC
-        ? address!.slice(0, 12) + '..' + address!.slice(-12)
-        : displayMode === DisplayMode.CUSTOM ? customName : undefined;
-      await result.api.submitScore(lastScore, name);
-      setSubmitting(false); setSubmitStatus(null);
-      setShowResult(false); setLastScore(0);
-      setTimeout(() => refreshLeaderboard(), 3000);
-    } catch (e: any) {
-      setSubmitting(false); setSubmitStatus(null);
-      setError(friendlyError(e));
+    });
+  }, [contractAddress]);
+
+  const runCircuit = useCallback(async (action: CircuitAction) => {
+    if (!wallet) { await connect(); return; }
+    if (action !== 'revoke' && !allReady) {
+      setError('Complete all five private checks before generating a proof.');
+      return;
     }
-  }, [wallet, lastScore, displayMode, customName, contractAddress, refreshLeaderboard]);
-
-  // ── Verify ownership (ZK proof — private, not stored on-chain) ────────
-
-  const verifyEntry = useCallback(async (entryId: number) => {
-    if (!wallet) return;
-    setVerifyingId(entryId);
+    setCurrentAction(action);
     setError(null);
+    setNotice(null);
     try {
-      const manager = getManager();
-      const deployment$ = manager.resolve(contractAddress as any);
-      const result = await new Promise<any>((resolve, reject) => {
-        const sub = deployment$.subscribe((d) => {
-          if (d.status === 'deployed') { Promise.resolve().then(() => sub.unsubscribe()); resolve(d); }
-          if (d.status === 'failed') { Promise.resolve().then(() => sub.unsubscribe()); reject(d.error); }
-        });
-      });
-      await result.api.verifyOwnership(entryId);
-      setVerifiedIds(prev => new Set(prev).add(entryId));
-    } catch (e: any) {
-      setError(friendlyError(e));
-    } finally {
-      setVerifyingId(null);
+      const api = await resolveApi();
+      setPhase('proving');
+      if (action === 'seal') await api.sealPlan(checklist);
+      if (action === 'refresh') await api.refreshPlan(checklist);
+      if (action === 'revoke') await api.revokePlan();
+      setPhase('submitting');
+      const nextState = action === 'revoke' ? 'revoked' : 'active';
+      setLocalSealState(nextState);
+      localStorage.setItem('kinproof-local-seal-state', nextState);
+      setPhase('confirmed');
+      setNotice(action === 'seal'
+        ? 'Your readiness seal is now verifiable without exposing the plan.'
+        : action === 'refresh'
+          ? 'Your seal was refreshed after all private checks passed again.'
+          : 'Your readiness seal is now publicly marked as revoked.');
+      window.setTimeout(() => void refresh(), 2_500);
+      window.setTimeout(() => setPhase('idle'), 4_000);
+    } catch (cause) {
+      setError(friendlyError(cause));
+      setPhase('idle');
     }
-  }, [wallet, contractAddress]);
+  }, [allReady, checklist, connect, refresh, resolveApi, wallet]);
 
-  // ── Render ───────────────────────────────────────────────────────────
+  const toggleCheck = (key: keyof RecoveryChecklist) => {
+    if (isBusy) return;
+    setChecklist((current) => ({ ...current, [key]: !current[key] }));
+    setNotice(null);
+    setError(null);
+  };
 
-  const isConnected = walletState === 'connected';
+  const primaryAction: CircuitAction = localSealState === 'active' ? 'refresh' : 'seal';
+  const primaryLabel = walletStatus !== 'connected'
+    ? 'Connect Lace to continue'
+    : localSealState === 'active'
+      ? 'Refresh private proof'
+      : 'Seal my recovery plan';
 
   return (
-    <div className="app">
-      <header className="header">
-        <div className="header-left">
-          <span className="title">Midnight Leaderboard</span>
-        </div>
-        <div className="header-right">
-          {isConnected && address ? (
-            <div className="chip"><span className="dot" />{truncAddr(address)}</div>
-          ) : walletState === 'detecting' || walletState === 'connecting' ? (
-            <div className="chip muted"><span className="spinner" />{walletState === 'detecting' ? 'Detecting…' : 'Connecting…'}</div>
-          ) : walletState === 'no-wallet' ? (
-            <a className="chip warn" href="https://chromewebstore.google.com/detail/lace/gafhhkghbfjjkeiendhlofajokpaflmk" target="_blank" rel="noopener noreferrer">Install Lace →</a>
+    <div className="app-shell">
+      <header className="topbar">
+        <a className="brand" href="#top" aria-label="Kinproof home">
+          <span className="brand-mark" aria-hidden="true"><i /><i /><i /></span>
+          <span>Kinproof</span>
+        </a>
+        <div className="topbar-actions">
+          <span className="network-pill"><i /> Midnight Preprod</span>
+          {walletStatus === 'connected' ? (
+            <button className="wallet-pill" onClick={disconnect} title="Disconnect wallet">
+              {truncate(address)} <span>Disconnect</span>
+            </button>
+          ) : walletStatus === 'missing' ? (
+            <a className="wallet-pill missing" href="https://www.lace.io/" target="_blank" rel="noreferrer">Install Lace ↗</a>
           ) : (
-            <button className="btn-connect" onClick={connect}>Connect Wallet</button>
+            <button className="wallet-pill" onClick={() => void connect()} disabled={walletStatus === 'connecting'}>
+              {walletStatus === 'connecting' || walletStatus === 'detecting' ? 'Finding Lace…' : 'Connect Lace'}
+            </button>
           )}
         </div>
       </header>
 
-      {error && (
-        <div className="error-bar">
-          <span>{error}</span>
-          <button onClick={() => setError(null)}>✕</button>
-        </div>
-      )}
-
-      <main className="game-layout">
-        <section className="card game-card">
-          <div className="contract-bar">
-            <button className="contract-addr" onClick={handleCopy} title={`Click to copy: ${contractAddress}`}>
-              <span className="mono">{truncAddr(contractAddress)}</span>
-              <span className="copy-icon">{copied ? '✓' : '⎘'}</span>
-            </button>
-            <button className="btn-text" onClick={() => setShowJoinPanel(!showJoinPanel)}>
-              {showJoinPanel ? 'Cancel' : 'Switch'}
-            </button>
+      <main id="top">
+        <section className="intro">
+          <div className="intro-copy">
+            <p className="eyebrow">A private recovery-readiness seal</p>
+            <h1>Prove the plan is ready.<br /><em>Keep the plan private.</em></h1>
+            <p className="lede">
+              Kinproof confirms that every recovery safeguard is in place without publishing
+              your backup, devices, trusted people, or instructions.
+            </p>
+            <div className="privacy-note">
+              <span className="privacy-glyph" aria-hidden="true">∴</span>
+              <p><strong>Zero details leave this page.</strong> Midnight receives a proof of completion and a one-way seal—not your answers.</p>
+            </div>
           </div>
 
-          {showJoinPanel && (
-            <div style={{ marginBottom: 16 }}>
-              <input className="input" type="text" placeholder="Contract address (64 hex chars)"
-                value={joinInput} onChange={e => setJoinInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && joinContract()} />
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn-primary" onClick={joinContract} disabled={!joinInput.trim()} style={{ flex: 1 }}>
-                  Join Contract
-                </button>
-                {isConnected ? (
-                  <button className="btn-secondary" onClick={deployContract} disabled={deploying} style={{ flex: 1 }}>
-                    {deploying ? <><span className="spinner" /> Deploying…</> : 'Deploy New'}
-                  </button>
-                ) : (
-                  <button className="btn-secondary" onClick={connect} disabled={walletState !== 'ready'} style={{ flex: 1 }}>
-                    Connect to Deploy
-                  </button>
-                )}
+          <div className="proof-console">
+            <div className="console-header">
+              <div>
+                <p className="console-kicker">Private check</p>
+                <h2>Recovery readiness</h2>
               </div>
+              <span className={`status-stamp ${allReady ? 'ready' : ''}`}>{allReady ? 'Ready to prove' : `${completed} of 5`}</span>
             </div>
-          )}
 
-          <h2>Click Challenge</h2>
-          <p className="dim">Click as fast as you can in 10 seconds.</p>
-
-          <div className="game-area">
-            <div className="timer-ring">
-              <svg viewBox="0 0 100 100">
-                <circle cx="50" cy="50" r="44" className="timer-track" />
-                <circle cx="50" cy="50" r="44" className="timer-fill"
-                  style={{ strokeDasharray: `${2 * Math.PI * 44}`, strokeDashoffset: `${2 * Math.PI * 44 * (1 - timeLeft / 10)}` }} />
-              </svg>
-              <div className="timer-label">{isPlaying ? timeLeft : showResult ? '✓' : '10'}</div>
-            </div>
-            <div className="click-score">
-              <span className="big-num">{fmtScore(clicks)}</span>
-              <span className="dim small">clicks</span>
-            </div>
-            <div className="click-zone">
-              {isPlaying ? (
-                <button className="btn-click" onPointerDown={handleClick}>CLICK!</button>
-              ) : (
-                <div className="click-spacer" />
-              )}
-            </div>
-          </div>
-
-          {showResult && !isPlaying && (
-            <div className="result-bar">
-              <button className="btn-secondary btn-sm" onClick={startGame}>Try Again</button>
-            </div>
-          )}
-
-          {!isPlaying && !showResult && (
-            <div className="start-bar">
-              <button className="btn-secondary" onClick={startGame}>Start Game</button>
-            </div>
-          )}
-
-          {lastScore > 0 && !isPlaying && (
-            <div className="submit-section">
-              <div className="mode-row">
-                {([[DisplayMode.ANONYMOUS, '🎭 Anonymous'], [DisplayMode.PUBLIC, '👁 Public'], [DisplayMode.CUSTOM, '✏️ Custom']] as const).map(([m, label]) => (
-                  <button key={m} className={`mode-btn ${displayMode === m ? 'active' : ''}`} onClick={() => setDisplayMode(m)}>{label}</button>
+            <div className="seal-stage" aria-label={`${completed} of 5 private checks complete`}>
+              <div className="seal-orbit" style={{ '--progress': `${completed * 20}%` } as React.CSSProperties}>
+                {CHECKS.map((check, index) => (
+                  <span
+                    key={check.key}
+                    className={`orbit-node node-${index + 1} ${checklist[check.key] ? 'complete' : ''}`}
+                  />
                 ))}
+                <div className="seal-core">
+                  <span className="seal-number">{completed}</span>
+                  <span>private checks</span>
+                </div>
               </div>
-              {displayMode === DisplayMode.CUSTOM && (
-                <input className="input" type="text" placeholder="Display name (max 32)" maxLength={32}
-                  value={customName} onChange={e => setCustomName(e.target.value)} />
-              )}
-              {isConnected ? (
-                <button className="btn-primary" onClick={submitScore}
-                  disabled={submitting || (displayMode === DisplayMode.CUSTOM && !customName.trim())}>
-                  {submitting ? <><span className="spinner" /> {submitStatus}</> : 'Submit to Chain'}
+              <p>Your answers are witness data.<br />They are never written on-chain.</p>
+            </div>
+
+            <div className="check-list">
+              {CHECKS.map((check, index) => (
+                <button
+                  className={`check-row ${checklist[check.key] ? 'checked' : ''}`}
+                  key={check.key}
+                  type="button"
+                  aria-pressed={checklist[check.key]}
+                  onClick={() => toggleCheck(check.key)}
+                >
+                  <span className="check-index">{String(index + 1).padStart(2, '0')}</span>
+                  <span className="check-copy"><strong>{check.title}</strong><small>{check.detail}</small></span>
+                  <span className="check-control" aria-hidden="true">{checklist[check.key] ? '✓' : ''}</span>
                 </button>
-              ) : (
-                <button className="btn-primary" onClick={connect} disabled={walletState !== 'ready'}>
-                  {walletState === 'no-wallet' ? 'Install Lace to Submit' : 'Connect Wallet to Submit'}
-                </button>
+              ))}
+            </div>
+
+            {error && <div className="message error-message" role="alert">{error}<button onClick={() => setError(null)}>×</button></div>}
+            {notice && <div className="message success-message" role="status">{notice}</div>}
+
+            <div className="console-actions">
+              <button
+                className="primary-action"
+                type="button"
+                disabled={isBusy || (walletStatus === 'connected' && !allReady)}
+                onClick={() => void runCircuit(primaryAction)}
+              >
+                <span>{isBusy
+                  ? phase === 'joining' ? 'Joining contract…'
+                    : phase === 'proving' ? 'Generating zero-knowledge proof…'
+                      : 'Confirming on Preprod…'
+                  : primaryLabel}</span>
+                <b aria-hidden="true">→</b>
+              </button>
+              {localSealState === 'active' && (
+                <button className="revoke-action" onClick={() => void runCircuit('revoke')} disabled={isBusy}>Revoke seal</button>
               )}
             </div>
-          )}
+          </div>
         </section>
 
-        <section className="card lb-card">
-          <div className="lb-header">
-            <h2>Leaderboard</h2>
-            <span className="dim mono">{leaderboard.length} entries</span>
+        <section className="public-record" aria-labelledby="public-record-title">
+          <div className="record-heading">
+            <p className="eyebrow">What the network can see</p>
+            <h2 id="public-record-title">A small public signal.<br />A large private boundary.</h2>
           </div>
-          {leaderboard.length === 0 ? (
-            <div className="lb-empty"><p className="dim">No scores yet. Be the first to submit!</p></div>
-          ) : (
-            <>
-              <div className="lb-row lb-head">
-                <span className="lb-rank">#</span>
-                <span className="lb-name">Player</span>
-                <span className="lb-score">Score</span>
-              </div>
-              <div className="lb-table">
-              {leaderboard.map(e => (
-                <div key={`${e.rank}-${e.id}`} className={`lb-row ${e.rank <= 3 ? 'lb-top' : ''}`}>
-                  <span className="lb-rank">{e.rank === 1 ? '🥇' : e.rank === 2 ? '🥈' : e.rank === 3 ? '🥉' : e.rank}</span>
-                  <span className="lb-name">
-                    {e.displayName}
-                    {verifiedIds.has(e.id) && <span className="verified-tag">✓ yours</span>}
-                  </span>
-                  <span className="lb-score mono">
-                    {fmtScore(e.score)}
-                    {isConnected && (
-                      <button className="btn-verify" onClick={() => verifyEntry(e.id)}
-                        disabled={verifyingId !== null || verifiedIds.has(e.id)}
-                        style={{ visibility: verifiedIds.has(e.id) ? 'hidden' : 'visible' }}
-                        title="Prove this entry is yours via ZK proof">
-                        {verifyingId === e.id ? <span className="spinner" /> : 'Prove'}
-                      </button>
-                    )}
-                  </span>
-                </div>
-              ))}
-              </div>
-            </>
-          )}
+          <div className="record-grid">
+            <article><span>Active seals</span><strong>{stateLoading ? '—' : publicState.seals.filter((seal) => seal.active).length}</strong><small>Pseudonymous commitments only</small></article>
+            <article><span>Plans sealed</span><strong>{stateLoading ? '—' : publicState.sealCount}</strong><small>No wallet address recorded</small></article>
+            <article><span>Private rechecks</span><strong>{stateLoading ? '—' : publicState.refreshCount}</strong><small>Answers remain witness data</small></article>
+          </div>
+          <div className="contract-strip">
+            <span><i /> Contract</span>
+            <code>{contractAddress ? truncate(contractAddress, 18, 14) : 'Deploying to Preprod next'}</code>
+            {contractAddress && <button onClick={() => void navigator.clipboard.writeText(contractAddress)}>Copy address</button>}
+          </div>
+          {stateError && contractAddress && <p className="indexer-note">Indexer status: {stateError}</p>}
+        </section>
+
+        <section className="boundary">
+          <div>
+            <p className="eyebrow">Privacy model</p>
+            <h2>The proof says “all five.”<br />It never says what or where.</h2>
+          </div>
+          <div className="boundary-columns">
+            <article className="observer-card">
+              <span>Public observer</span>
+              <ul><li>Sees an app-specific commitment</li><li>Sees active or revoked status</li><li>Sees the proof revision</li></ul>
+            </article>
+            <article className="private-card">
+              <span>Only you</span>
+              <ul><li>Know the five checklist answers</li><li>Know people, devices, and locations</li><li>Hold the browser-local control secret</li></ul>
+            </article>
+          </div>
         </section>
       </main>
 
-      <footer className="footer">
-        <span>Built on <a href="https://midnight.network" target="_blank" rel="noopener noreferrer">Midnight</a></span>
+      <footer>
+        <span>Kinproof / Midnight Preprod</span>
+        <p>Preparedness without exposure.</p>
+        <a href="https://github.com/arko05roy/kinproof" target="_blank" rel="noreferrer">Source ↗</a>
       </footer>
     </div>
   );

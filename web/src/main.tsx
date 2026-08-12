@@ -1,6 +1,8 @@
 import { Buffer } from 'buffer';
 (globalThis as any).Buffer = Buffer;
 
+import '@midnight-ntwrk/dapp-connector-api';
+
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
