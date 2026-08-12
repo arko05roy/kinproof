@@ -7,7 +7,8 @@ import { useKinproofState } from './hooks/useKinproofState.js';
 import pino from 'pino';
 
 const NETWORK_ID = import.meta.env.VITE_NETWORK_ID ?? 'preprod';
-const DEFAULT_CONTRACT = import.meta.env.VITE_DEFAULT_CONTRACT ?? '';
+const DEFAULT_CONTRACT = import.meta.env.VITE_DEFAULT_CONTRACT ??
+  '1af8d7ad340f054a2e5266a2dd214163b7e85614f94725db5638d91a9cc0287e';
 
 type WalletStatus = 'detecting' | 'missing' | 'ready' | 'connecting' | 'connected';
 type CircuitAction = 'seal' | 'refresh' | 'revoke';

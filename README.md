@@ -14,8 +14,9 @@ Loss and incapacity are predictable risks, but publishing a recovery plan create
 - Compact compiler: `0.31.1`
 - Contract circuits: `sealPlan`, `refreshPlan`, `revokePlan`
 - Tests: 8 passing
-- Live demo: deployment in progress
-- Preprod contract: funded deployer ready; public RPC sync currently blocking deployment
+- Live demo: https://arko05roy.github.io/kinproof/
+- Preprod contract: [`1af8d7ad…9cc0287e`](https://explorer.preprod.midnight.network/contract/1af8d7ad340f054a2e5266a2dd214163b7e85614f94725db5638d91a9cc0287e)
+- Deployment: indexer-verified `SUCCESS` at block `2074208`
 
 ## Public state vs private witness
 
@@ -69,7 +70,9 @@ npm run build        # contract, API, and production web bundle
 
 ## Deploy to Preprod
 
-The deployer creates a BIP-39 wallet locally, stores the recovery material with owner-only permissions in a gitignored file, waits for faucet funding, registers NIGHT for DUST, and deploys the compiled contract.
+Kinproof is deployed at `1af8d7ad340f054a2e5266a2dd214163b7e85614f94725db5638d91a9cc0287e`. The indexer recorded transaction `8d9131d26341a6d11202e7e7c0becf48a25a19c141edb440bf1b2adad462db8f` as `SUCCESS` in block `2074208`.
+
+The standard deployer creates a BIP-39 wallet locally, waits for faucet funding, registers NIGHT for DUST, and deploys the compiled contract. For a funded CLI seed, the supplied Preprod recovery runbook is also implemented as `status:skill`, `dust:parallel`, and `deploy:skill`; pass the seed only through the ephemeral `SEED` environment variable and never commit it.
 
 ```bash
 npm run deploy:preprod
