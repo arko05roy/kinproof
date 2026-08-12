@@ -15,7 +15,7 @@ Loss and incapacity are predictable risks, but publishing a recovery plan create
 - Contract circuits: `sealPlan`, `refreshPlan`, `revokePlan`
 - Tests: 8 passing
 - Live demo: deployment in progress
-- Preprod contract: deployment in progress
+- Preprod contract: funded deployer ready; public RPC sync currently blocking deployment
 
 ## Public state vs private witness
 
@@ -90,4 +90,3 @@ Never commit `.midnight-state.json`, `.midnight-wallet-state/`, or private-state
 - [Midnight documentation](https://docs.midnight.network/)
 
 Apache-2.0
-
