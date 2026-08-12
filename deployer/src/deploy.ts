@@ -152,13 +152,32 @@ async function main() {
   console.log('  ℹ  This may take several minutes depending on network size.');
   console.log('     RPC disconnection messages during sync are normal and can be safely ignored.\n');
   const syncStart = Date.now();
+  let latestSyncState: any;
+  const syncSubscription = walletCtx.wallet.state().subscribe((nextState) => {
+    latestSyncState = nextState;
+  });
+  const progressSummary = (label: string, progress: any) => {
+    if (progress === undefined) return `${label}=waiting`;
+    const applied = progress.appliedIndex?.toString?.() ?? '?';
+    const highest = progress.highestIndex?.toString?.() ?? '?';
+    const connected = progress.isConnected === true ? 'online' : 'offline';
+    return `${label}=${applied}/${highest} ${connected}`;
+  };
   const syncInterval = setInterval(() => {
     const elapsed = Math.round((Date.now() - syncStart) / 1000);
-    process.stdout.write(`\r  ⏳ Still syncing... (${elapsed}s elapsed)   `);
-  }, 5000);
+    const details = latestSyncState === undefined
+      ? 'waiting for first indexer update'
+      : [
+          progressSummary('shielded', latestSyncState.shielded?.progress),
+          progressSummary('unshielded', latestSyncState.unshielded?.progress),
+          progressSummary('dust', latestSyncState.dust?.progress),
+        ].join(' · ');
+    console.log(`  ⏳ Sync ${elapsed}s · ${details}`);
+  }, 10_000);
   const state = await walletCtx.wallet.waitForSyncedState();
   clearInterval(syncInterval);
-  process.stdout.write('\r  ✓ Synced with network.                                      \n');
+  syncSubscription.unsubscribe();
+  console.log('  ✓ Synced with network.\n');
 
   // Persist sync state now so a later deploy failure doesn't waste the sync work.
   await persistWalletState(network, walletCtx);

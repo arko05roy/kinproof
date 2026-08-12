@@ -2,7 +2,7 @@ name: kinproof-preprod
 
 services:
   proof-server:
-    image: midnightntwrk/proof-server:8.1.0
+    image: midnightntwrk/proof-server:8.0.3
     container_name: kinproof-proof-server
     command: ["midnight-proof-server -v"]
     ports:

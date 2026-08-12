@@ -68,6 +68,10 @@ web/public/zkir/
 .midnight-state.json
 .midnight-wallet-state/
 deployer/kinproof-private-state/
+deployer/kinproof-preprod-private-state/
+deployer/*-preprod-private-state/
+deployer/dust-snapshot.json
+deployer/.dust-ranges/
 
 # ai scratch work
 .midnight-expert
