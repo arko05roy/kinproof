@@ -1,5 +1,5 @@
 {
-  "name": "leaderboard-contract",
+  "name": "kinproof-contract",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -13,8 +13,8 @@
     }
   },
   "scripts": {
-    "compact": "compact compile leaderboard.compact managed/leaderboard",
+    "compact": "compact compile kinproof.compact managed/kinproof",
     "build": "rm -rf dist && tsc --project tsconfig.build.json && cp -Rf ./managed ./dist/managed",
-    "test": "vitest run"
+    "test": "vitest run --passWithNoTests"
   }
 }

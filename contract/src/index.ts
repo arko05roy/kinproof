@@ -1,16 +1,22 @@
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
 
-export * as Leaderboard from '../managed/leaderboard/contract/index.js';
-export { createWitnesses, setCustomName, createLeaderboardPrivateState } from './witnesses.js';
-export type { LeaderboardPrivateState } from './witnesses.js';
+export * as Kinproof from '../managed/kinproof/contract/index.js';
+export {
+  createKinproofPrivateState,
+  createWitnesses,
+  emptyChecklist,
+  withChecklist,
+} from './witnesses.js';
+export type { KinproofPrivateState, RecoveryChecklist } from './witnesses.js';
 
-import * as LeaderboardContract from '../managed/leaderboard/contract/index.js';
+import * as KinproofContract from '../managed/kinproof/contract/index.js';
 import { createWitnesses } from './witnesses.js';
 
-export const CompiledLeaderboardContract = CompiledContract.make(
-  'leaderboard',
-  LeaderboardContract.Contract,
+export const CompiledKinproofContract = CompiledContract.make(
+  'kinproof',
+  KinproofContract.Contract,
 ).pipe(
   CompiledContract.withWitnesses(createWitnesses()),
-  CompiledContract.withCompiledFileAssets('./managed/leaderboard'),
+  CompiledContract.withCompiledFileAssets('./managed/kinproof'),
 );
+

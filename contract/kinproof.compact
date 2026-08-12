@@ -1,0 +1,87 @@
+/**
+ * Kinproof — private recovery-readiness seals on Midnight.
+ *
+ * The five readiness answers and the control secret are witnesses. They are
+ * evaluated in the zero-knowledge circuit and never disclosed to the ledger.
+ * Public state contains only an app-specific commitment, status, and revision.
+ */
+
+pragma language_version 0.23;
+
+import CompactStandardLibrary;
+
+struct ReadinessSeal {
+  active: Boolean,
+  revision: Uint<64>
+}
+
+export ledger seals: Map<Bytes<32>, ReadinessSeal>;
+export ledger sealCount: Counter;
+export ledger refreshCount: Counter;
+export ledger revokeCount: Counter;
+
+witness localControlSecret(): Bytes<32>;
+witness hasOfflineBackup(): Boolean;
+witness hasTestedRecovery(): Boolean;
+witness hasTrustedContact(): Boolean;
+witness hasDeviceAccessPlan(): Boolean;
+witness hasCurrentInstructions(): Boolean;
+
+/** Derive an unlinkable, app-specific public identifier from a local secret. */
+export circuit sealCommitment(secret: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([
+    pad(32, "kinproof:readiness:v1:"),
+    secret
+  ]);
+}
+
+/** Assert every private readiness requirement without revealing any answer. */
+circuit requireReady(): [] {
+  assert(hasOfflineBackup(), "offline backup is not confirmed");
+  assert(hasTestedRecovery(), "recovery test is not confirmed");
+  assert(hasTrustedContact(), "trusted contact is not confirmed");
+  assert(hasDeviceAccessPlan(), "device access plan is not confirmed");
+  assert(hasCurrentInstructions(), "instructions are not current");
+}
+
+/** Publish a first readiness seal. */
+export circuit sealPlan(): [] {
+  requireReady();
+  const commitment = disclose(sealCommitment(localControlSecret()));
+  assert(!seals.member(commitment), "this plan already has a seal");
+
+  seals.insert(commitment, ReadinessSeal {
+    active: true,
+    revision: 1
+  });
+  sealCount.increment(1);
+}
+
+/** Re-run every private check and advance the public seal revision. */
+export circuit refreshPlan(): [] {
+  requireReady();
+  const commitment = disclose(sealCommitment(localControlSecret()));
+  assert(seals.member(commitment), "seal not found");
+
+  const previous = seals.lookup(commitment);
+  assert(previous.active, "seal is revoked");
+  seals.insert(commitment, ReadinessSeal {
+    active: true,
+    revision: (previous.revision + 1) as Uint<64>
+  });
+  refreshCount.increment(1);
+}
+
+/** Revoke a seal using proof of knowledge of its private control secret. */
+export circuit revokePlan(): [] {
+  const commitment = disclose(sealCommitment(localControlSecret()));
+  assert(seals.member(commitment), "seal not found");
+
+  const previous = seals.lookup(commitment);
+  assert(previous.active, "seal is already revoked");
+  seals.insert(commitment, ReadinessSeal {
+    active: false,
+    revision: previous.revision
+  });
+  revokeCount.increment(1);
+}
