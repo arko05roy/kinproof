@@ -15,6 +15,7 @@ Loss and incapacity are predictable risks, but publishing a recovery plan create
 - Contract circuits: `sealPlan`, `refreshPlan`, `revokePlan`
 - Tests: 8 passing
 - Live demo: https://arko05roy.github.io/kinproof/
+- Vercel deployment: https://kinproof-web-git-main-arko05roys-projects.vercel.app/
 - Preprod contract: [`1af8d7ad…9cc0287e`](https://explorer.preprod.midnight.network/contract/1af8d7ad340f054a2e5266a2dd214163b7e85614f94725db5638d91a9cc0287e)
 - Deployment: indexer-verified `SUCCESS` at block `2074208`
 
@@ -91,5 +92,10 @@ Never commit `.midnight-state.json`, `.midnight-wallet-state/`, or private-state
 - [Product proposal](docs/product-proposal.md)
 - [Architecture and privacy boundary](docs/architecture.md)
 - [Midnight documentation](https://docs.midnight.network/)
+
+## Demo
+
+- [Open the live Kinproof DApp](https://kinproof-web-git-main-arko05roys-projects.vercel.app/)
+- [Watch the Kinproof demo video](https://youtu.be/7b9DmwkY1E8)
 
 Apache-2.0
