@@ -14,9 +14,9 @@ Loss and incapacity are predictable risks, but publishing a recovery plan create
 - Compact compiler: `0.31.1`
 - Contract circuits: `sealPlan`, `refreshPlan`, `revokePlan`
 - Tests: 8 passing
-- Live demo: https://arko05roy.github.io/kinproof/
-- Vercel deployment: https://kinproof-web-git-main-arko05roys-projects.vercel.app/
-- Preprod contract: [`1af8d7ad…9cc0287e`](https://explorer.preprod.midnight.network/contract/1af8d7ad340f054a2e5266a2dd214163b7e85614f94725db5638d91a9cc0287e)
+- Official live demo: https://kinproof-web.vercel.app/
+- GitHub Pages mirror: https://arko05roy.github.io/kinproof/
+- Preprod contract address (full): [`1af8d7ad340f054a2e5266a2dd214163b7e85614f94725db5638d91a9cc0287e`](https://explorer.preprod.midnight.network/contract/1af8d7ad340f054a2e5266a2dd214163b7e85614f94725db5638d91a9cc0287e)
 - Deployment: indexer-verified `SUCCESS` at block `2074208`
 
 ## Public state vs private witness
@@ -71,7 +71,7 @@ npm run build        # contract, API, and production web bundle
 
 ## Deploy to Preprod
 
-Kinproof is deployed at `1af8d7ad340f054a2e5266a2dd214163b7e85614f94725db5638d91a9cc0287e`. The indexer recorded transaction `8d9131d26341a6d11202e7e7c0becf48a25a19c141edb440bf1b2adad462db8f` as `SUCCESS` in block `2074208`.
+Kinproof is deployed at the full Preprod contract address `1af8d7ad340f054a2e5266a2dd214163b7e85614f94725db5638d91a9cc0287e`. The indexer recorded transaction `8d9131d26341a6d11202e7e7c0becf48a25a19c141edb440bf1b2adad462db8f` as `SUCCESS` in block `2074208`.
 
 The standard deployer creates a BIP-39 wallet locally, waits for faucet funding, registers NIGHT for DUST, and deploys the compiled contract. For a funded CLI seed, the supplied Preprod recovery runbook is also implemented as `status:skill`, `dust:parallel`, and `deploy:skill`; pass the seed only through the ephemeral `SEED` environment variable and never commit it.
 
@@ -95,7 +95,8 @@ Never commit `.midnight-state.json`, `.midnight-wallet-state/`, or private-state
 
 ## Demo
 
-- [Open the live Kinproof DApp](https://kinproof-web-git-main-arko05roys-projects.vercel.app/)
+- [Open the official live Kinproof DApp](https://kinproof-web.vercel.app/)
+- [Open the GitHub Pages mirror](https://arko05roy.github.io/kinproof/)
 - [Watch the Kinproof demo video](https://youtu.be/7b9DmwkY1E8)
 
 Apache-2.0

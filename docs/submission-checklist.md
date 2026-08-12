@@ -54,5 +54,6 @@
 ## Public links
 
 - Repository: https://github.com/arko05roy/kinproof
-- Demo: https://arko05roy.github.io/kinproof/
+- Official demo: https://kinproof-web.vercel.app/
+- GitHub Pages mirror: https://arko05roy.github.io/kinproof/
 - Passing CI: https://github.com/arko05roy/kinproof/actions/workflows/ci.yml
