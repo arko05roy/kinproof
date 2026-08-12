@@ -6,14 +6,17 @@
   "workspaces": [
     "contract",
     "api",
-    "web"
+    "web",
+    "deployer"
   ],
   "scripts": {
     "compile": "npm run compact --workspace kinproof-contract",
     "test": "npm run test --workspace kinproof-contract",
     "typecheck": "npm run typecheck --workspace @kinproof/api && npm run typecheck --workspace kinproof-web",
     "build": "npm run build --workspace kinproof-contract && npm run build --workspace @kinproof/api && npm run build --workspace kinproof-web",
-    "dev": "npm run dev --workspace kinproof-web"
+    "dev": "npm run dev --workspace kinproof-web",
+    "deploy:preprod": "npm run setup --workspace kinproof-deployer",
+    "wallet:balance": "npm run check-balance --workspace kinproof-deployer -- --network preprod"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^5.1.4",

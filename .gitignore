@@ -61,8 +61,13 @@ jspm_packages/
 .vite/
 
 # Dev-time copies of circuit assets (originals in contract/managed/)
-leaderboard-ui/public/keys/
-leaderboard-ui/public/zkir/
+web/public/keys/
+web/public/zkir/
+
+# Local wallet, deployment, and private-state data
+.midnight-state.json
+.midnight-wallet-state/
+deployer/kinproof-private-state/
 
 # ai scratch work
 .midnight-expert
