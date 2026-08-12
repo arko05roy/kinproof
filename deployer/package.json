@@ -11,6 +11,7 @@
     "setup": "docker compose up -d --wait proof-server && npm run compile && npm run deploy -- --network preprod",
     "deploy": "tsx src/deploy.ts",
     "check-balance": "npx tsx src/check-balance.ts",
+    "address": "tsx src/address.ts",
     "network": "tsx src/network.ts",
     "proof-server:start": "docker compose up -d",
     "proof-server:stop": "docker compose down",

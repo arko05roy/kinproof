@@ -45,7 +45,7 @@ export {
   WALLET_STATE_VERSION,
 } from './wallet-state';
 
-function deriveKeys(seed: string) {
+export function deriveKeys(seed: string) {
   const hdWallet = HDWallet.fromSeed(Buffer.from(seed, 'hex'));
   if (hdWallet.type !== 'seedOk') throw new Error('Invalid seed');
   const result = hdWallet.hdWallet
