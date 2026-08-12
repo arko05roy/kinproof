@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ContractState } from '@midnight-ntwrk/midnight-js-protocol/compact-runtime';
-import { Kinproof } from 'kinproof-contract';
+// Use the generated contract module directly. This keeps the web workspace
+// deployable when Vercel is configured with `web/` as its project root, where
+// npm does not create the monorepo's `kinproof-contract` workspace symlink.
+import * as Kinproof from '../../../contract/managed/kinproof/contract/index.js';
 
 const INDEXER_URL = import.meta.env.VITE_INDEXER_URL ??
   'https://indexer.preprod.midnight.network/api/v4/graphql';
@@ -88,4 +91,3 @@ export function useKinproofState(contractAddress: string | null, refreshInterval
 
   return { state, loading, error, refresh };
 }
-
