@@ -1,104 +1,109 @@
-/**
- * Shared business logic for the leaderboard contract.
- *
- * Platform-agnostic — works from browser (Lace) or CLI (wallet-sdk).
- * Each platform provides its own provider implementations.
- *
- * @packageDocumentation
- */
+/** Platform-neutral Kinproof contract API. */
 
-import * as Leaderboard from '../../contract/managed/leaderboard/contract/index.js';
-import { type ContractAddress } from '@midnight-ntwrk/midnight-js-protocol/compact-runtime';
-import { type Logger } from 'pino';
+import * as ContractBindings from '../../contract/managed/kinproof/contract/index.js';
 import {
-  type LeaderboardDerivedState,
-  type LeaderboardEntry,
-  type LeaderboardProviders,
-  type DeployedLeaderboardContract,
-  leaderboardPrivateStateKey,
-} from './common-types.js';
-import { CompiledLeaderboardContract, createLeaderboardPrivateState, type LeaderboardPrivateState } from '../../contract/src/index';
-import { setCustomName } from '../../contract/src/witnesses.js';
-import * as utils from './utils/index.js';
+  CompiledKinproofContract,
+  createKinproofPrivateState,
+  withChecklist,
+  type KinproofPrivateState,
+  type RecoveryChecklist,
+} from '../../contract/src/index.js';
+import type { ContractAddress } from '@midnight-ntwrk/midnight-js-protocol/compact-runtime';
 import { deployContract, findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 import { map, type Observable } from 'rxjs';
+import type { Logger } from 'pino';
+import {
+  kinproofPrivateStateKey,
+  type DeployedKinproofContract,
+  type KinproofDerivedState,
+  type KinproofProviders,
+} from './common-types.js';
 
-/**
- * API for a deployed leaderboard contract.
- *
- * Created via `LeaderboardAPI.deploy()` (admin) or `LeaderboardAPI.join()` (player).
- */
-export class LeaderboardAPI {
+const toHex = (bytes: Uint8Array): string =>
+  Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+
+export class KinproofAPI {
   private constructor(
-    public readonly deployedContract: DeployedLeaderboardContract,
-    providers: LeaderboardProviders,
+    public readonly deployedContract: DeployedKinproofContract,
+    private readonly providers: KinproofProviders,
     private readonly logger?: Logger,
   ) {
     this.deployedContractAddress = deployedContract.deployTxData.public.contractAddress;
     providers.privateStateProvider.setContractAddress(this.deployedContractAddress);
-
     this.state$ = providers.publicDataProvider
       .contractStateObservable(this.deployedContractAddress, { type: 'latest' })
       .pipe(
-        map((contractState) => Leaderboard.ledger(contractState.data)),
-        map((ledgerState): LeaderboardDerivedState => {
-          const entries: LeaderboardEntry[] = [];
-          for (const [key, entry] of ledgerState.scores) {
-            entries.push({
-              id: Number(key),
-              score: Number(entry.score),
-              displayName: utils.decodeDisplayName(entry.displayName, Number(key), Number(entry.score)),
-              ownerHash: entry.ownerHash.toString(),
-            });
-          }
-          entries.sort((a, b) => b.score - a.score);
-          return { entryCount: Number(ledgerState.nextId), entries };
-        }),
+        map((contractState) => ContractBindings.ledger(contractState.data)),
+        map((ledger): KinproofDerivedState => ({
+          sealCount: Number(ledger.sealCount),
+          refreshCount: Number(ledger.refreshCount),
+          revokeCount: Number(ledger.revokeCount),
+          seals: Array.from(ledger.seals, ([commitment, seal]) => ({
+            commitment: toHex(commitment),
+            active: seal.active,
+            revision: Number(seal.revision),
+          })),
+        })),
       );
   }
 
   readonly deployedContractAddress: ContractAddress;
-  readonly state$: Observable<LeaderboardDerivedState>;
+  readonly state$: Observable<KinproofDerivedState>;
 
-  /** Submit a score. If customName is provided, it's used as display name via witness. */
-  async submitScore(score: number, customName?: string): Promise<void> {
-    if (customName) {
-      setCustomName(customName);
-    }
-    await (this.deployedContract as any).callTx.submitScore(BigInt(score), !!customName);
+  async sealPlan(checklist: RecoveryChecklist): Promise<void> {
+    await this.updateChecklist(checklist);
+    this.logger?.info('Generating private Kinproof readiness seal');
+    await (this.deployedContract as any).callTx.sealPlan();
   }
 
-  /** Prove ownership of a leaderboard entry. The proof is private — use it to claim a prize or verify identity. */
-  async verifyOwnership(entryId: number): Promise<void> {
-    await (this.deployedContract as any).callTx.verifyOwnership(BigInt(entryId));
+  async refreshPlan(checklist: RecoveryChecklist): Promise<void> {
+    await this.updateChecklist(checklist);
+    this.logger?.info('Refreshing Kinproof readiness seal');
+    await (this.deployedContract as any).callTx.refreshPlan();
   }
 
-  /** Deploy a new leaderboard contract (admin operation). */
-  static async deploy(providers: LeaderboardProviders, secretKey: Uint8Array, logger?: Logger): Promise<LeaderboardAPI> {
-    const deployedContract = await deployContract(providers as any, {
-      compiledContract: CompiledLeaderboardContract,
-      privateStateId: leaderboardPrivateStateKey,
-      initialPrivateState: createLeaderboardPrivateState(secretKey),
-    });
-    return new LeaderboardAPI(deployedContract, providers, logger);
+  async revokePlan(): Promise<void> {
+    this.logger?.info('Revoking Kinproof readiness seal');
+    await (this.deployedContract as any).callTx.revokePlan();
   }
 
-  /** Join an existing leaderboard contract (player operation). */
-  static async join(
-    providers: LeaderboardProviders,
-    contractAddress: ContractAddress,
-    secretKey: Uint8Array,
+  private async updateChecklist(checklist: RecoveryChecklist): Promise<void> {
+    const current = await this.providers.privateStateProvider.get(kinproofPrivateStateKey);
+    if (!current) throw new Error('Kinproof private state is unavailable');
+    await this.providers.privateStateProvider.set(
+      kinproofPrivateStateKey,
+      withChecklist(current, checklist),
+    );
+  }
+
+  static async deploy(
+    providers: KinproofProviders,
+    controlSecret: Uint8Array,
     logger?: Logger,
-  ): Promise<LeaderboardAPI> {
-    const deployedContract = await findDeployedContract(providers as any, {
-      contractAddress,
-      compiledContract: CompiledLeaderboardContract,
-      privateStateId: leaderboardPrivateStateKey,
-      initialPrivateState: createLeaderboardPrivateState(secretKey),
+  ): Promise<KinproofAPI> {
+    const deployed = await deployContract(providers as any, {
+      compiledContract: CompiledKinproofContract,
+      privateStateId: kinproofPrivateStateKey,
+      initialPrivateState: createKinproofPrivateState(controlSecret),
     });
-    return new LeaderboardAPI(deployedContract, providers, logger);
+    return new KinproofAPI(deployed, providers, logger);
+  }
+
+  static async join(
+    providers: KinproofProviders,
+    contractAddress: ContractAddress,
+    controlSecret: Uint8Array,
+    logger?: Logger,
+  ): Promise<KinproofAPI> {
+    const deployed = await findDeployedContract(providers as any, {
+      contractAddress,
+      compiledContract: CompiledKinproofContract,
+      privateStateId: kinproofPrivateStateKey,
+      initialPrivateState: createKinproofPrivateState(controlSecret),
+    });
+    return new KinproofAPI(deployed, providers, logger);
   }
 }
 
-export * as utils from './utils/index.js';
 export * from './common-types.js';
+
