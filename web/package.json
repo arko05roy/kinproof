@@ -1,11 +1,12 @@
 {
-  "name": "leaderboard-ui",
+  "name": "kinproof-web",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "mkdir -p ./public/keys ./public/zkir && cp -r ../contract/managed/leaderboard/keys/* ./public/keys/ && cp -r ../contract/managed/leaderboard/zkir/* ./public/zkir/ && vite",
-    "build": "tsc && vite build --mode preprod && cp -r ../contract/managed/leaderboard/keys ./dist/keys && cp -r ../contract/managed/leaderboard/zkir ./dist/zkir",
+    "dev": "mkdir -p ./public/keys ./public/zkir && cp -r ../contract/managed/kinproof/keys/* ./public/keys/ && cp -r ../contract/managed/kinproof/zkir/* ./public/zkir/ && vite",
+    "build": "tsc && vite build --mode preprod && cp -r ../contract/managed/kinproof/keys ./dist/keys && cp -r ../contract/managed/kinproof/zkir ./dist/zkir",
+    "typecheck": "tsc --noEmit",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -20,7 +21,7 @@
     "@midnight-ntwrk/midnight-js-utils": "4.1.1",
     "buffer": "^6.0.3",
     "fp-ts": "^2.16.11",
-    "leaderboard-contract": "*",
+    "kinproof-contract": "*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "rxjs": "^7.8.2",
