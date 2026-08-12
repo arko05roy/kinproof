@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="460" viewBox="0 0 1200 460">
+  <rect width="1200" height="460" rx="18" fill="#171a20"/>
+  <circle cx="34" cy="30" r="7" fill="#f16952"/><circle cx="58" cy="30" r="7" fill="#e1b45f"/><circle cx="82" cy="30" r="7" fill="#79ad91"/>
+  <g fill="#e7ebf1" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="24">
+    <text x="34" y="90" fill="#9ab5a7">$ compact compile contract/kinproof.compact contract/managed/kinproof</text>
+    <text x="34" y="142">Compiling 3 circuits:</text>
+    <text x="68" y="202">circuit "refreshPlan" (k=13, rows=4253)</text>
+    <text x="68" y="252">circuit "revokePlan"  (k=13, rows=4173)</text>
+    <text x="68" y="302">circuit "sealPlan"    (k=13, rows=4188)</text>
+    <text x="34" y="376" fill="#c8bdf2">Overall progress [====================] 3/3</text>
+  </g>
+</svg>

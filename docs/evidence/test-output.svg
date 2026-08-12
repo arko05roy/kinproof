@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="380" viewBox="0 0 1200 380">
+  <rect width="1200" height="380" rx="18" fill="#171a20"/>
+  <circle cx="34" cy="30" r="7" fill="#f16952"/><circle cx="58" cy="30" r="7" fill="#e1b45f"/><circle cx="82" cy="30" r="7" fill="#79ad91"/>
+  <g fill="#e7ebf1" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="24">
+    <text x="34" y="90" fill="#9ab5a7">$ npm test</text>
+    <text x="34" y="148">RUN  v4.1.10  contract/</text>
+    <text x="34" y="210" fill="#9ab5a7">✓ test/kinproof.test.ts (8 tests)</text>
+    <text x="34" y="274">Test Files  1 passed (1)</text>
+    <text x="34" y="324">Tests       8 passed (8)</text>
+  </g>
+</svg>
