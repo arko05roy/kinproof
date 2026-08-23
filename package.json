@@ -17,7 +17,8 @@
     "vercel-build": "cd web && npm run build",
     "dev": "npm run dev --workspace kinproof-web",
     "deploy:preprod": "npm run setup --workspace kinproof-deployer",
-    "wallet:balance": "npm run check-balance --workspace kinproof-deployer -- --network preprod"
+    "wallet:balance": "npm run check-balance --workspace kinproof-deployer -- --network preprod",
+    "wallets:generate": "npm run wallets:generate --workspace kinproof-deployer -- --network preprod"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^5.1.4",

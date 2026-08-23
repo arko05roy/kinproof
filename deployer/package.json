@@ -15,6 +15,7 @@
     "deploy:skill": "tsx src/preprod-deploy-skill.ts",
     "check-balance": "npx tsx src/check-balance.ts",
     "address": "tsx src/address.ts",
+    "wallets:generate": "tsx src/generate-wallets.ts",
     "network": "tsx src/network.ts",
     "proof-server:start": "docker compose up -d",
     "proof-server:stop": "docker compose down",
