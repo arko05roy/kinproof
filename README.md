@@ -91,6 +91,11 @@ Never commit `.midnight-state.json`, `.midnight-wallet-state/`, or private-state
 
 - [Product proposal](docs/product-proposal.md)
 - [Architecture and privacy boundary](docs/architecture.md)
+- [Local setup](docs/setup.md)
+- [User guide](docs/usage.md)
+- [Launch cohort and verification record](docs/launch-cohort.md)
+- [Feedback loop](docs/feedback-loop.md)
+- [Judge-facing submission checklist](docs/submission-checklist.md)
 - [Midnight documentation](https://docs.midnight.network/)
 
 ## Demo
@@ -98,5 +103,9 @@ Never commit `.midnight-state.json`, `.midnight-wallet-state/`, or private-state
 - [Open the official live Kinproof DApp](https://kinproof-web.vercel.app/)
 - [Open the GitHub Pages mirror](https://arko05roy.github.io/kinproof/)
 - [Watch the Kinproof demo video](https://youtu.be/7b9DmwkY1E8)
+
+## Launch evidence
+
+Kinproof has a live Preprod contract, a browser DApp, and a 50-address launch cohort recorded in [`user-wallet.md`](user-wallet.md). Each cohort address is a Midnight Preprod address supplied for the launch. The contract does not publish wallet addresses or recovery answers, so an address alone does not prove a person created a seal; the cohort workflow records consent, completion, and optional transaction evidence separately. See [the cohort record](docs/launch-cohort.md) and [feedback loop](docs/feedback-loop.md).
 
 Apache-2.0

@@ -35,9 +35,20 @@
 - [x] Full setup, usage, architecture, and privacy documentation
 - [x] CI/CD on the product repository
 - [x] 15-commit delivery plan
-- [ ] Product X profile
+- [~] Product X profile — intentionally out of scope for this delivery
 - [x] Final Preprod deployment evidence
-- [ ] Demo video
+- [x] Demo video: https://youtu.be/7b9DmwkY1E8
+
+## Level 5 / user-feedback delivery
+
+- [x] Same Kinproof MVP extended from Level 4
+- [x] 50 supplied Midnight Preprod cohort wallet addresses: [`../user-wallet.md`](../user-wallet.md)
+- [x] Cohort onboarding, consent, and verification procedure: [`launch-cohort.md`](launch-cohort.md)
+- [x] Structured feedback template and prioritization workflow: [`feedback-loop.md`](feedback-loop.md)
+- [x] Updated setup and usage documentation: [`setup.md`](setup.md), [`usage.md`](usage.md)
+- [x] Live demo and contract address are linked below
+
+> The list is a cohort registry, not a disclosure of recovery plans or an assertion that every address completed a seal. Because Kinproof deliberately does not put wallet identities in its contract state, completion is evidenced through a participant-approved transaction reference or screen recording held in the private launch log.
 
 ## Preprod funding evidence
 
@@ -57,3 +68,4 @@
 - Official demo: https://kinproof-web.vercel.app/
 - GitHub Pages mirror: https://arko05roy.github.io/kinproof/
 - Passing CI: https://github.com/arko05roy/kinproof/actions/workflows/ci.yml
+- Demo video: https://youtu.be/7b9DmwkY1E8
