@@ -8,6 +8,23 @@
 
 Loss and incapacity are predictable risks, but publishing a recovery plan creates a new security risk. Kinproof turns preparedness into a verifiable signal without turning the plan into an attack map. A seal can be created, privately rechecked and refreshed, or revoked by proving knowledge of its browser-local control secret.
 
+## Evidence
+
+- [Product proposal](docs/product-proposal.md)
+- [Architecture and privacy boundary](docs/architecture.md)
+- [Local setup](docs/setup.md)
+- [User guide](docs/usage.md)
+- [Launch cohort and verification record](docs/launch-cohort.md)
+- [Feedback loop](docs/feedback-loop.md)
+- [Judge-facing submission checklist](docs/submission-checklist.md)
+- [Midnight documentation](https://docs.midnight.network/)
+
+## Demo
+
+- [Open the official live Kinproof DApp](https://kinproof-web.vercel.app/)
+- [Open the GitHub Pages mirror](https://arko05roy.github.io/kinproof/)
+- [Watch the Kinproof demo video](https://youtu.be/7b9DmwkY1E8)
+
 ## Status
 
 - Network: Midnight Preprod
@@ -86,23 +103,6 @@ Never commit `.midnight-state.json`, `.midnight-wallet-state/`, or private-state
 - `sealPlan`: proves all five private checks and creates revision 1.
 - `refreshPlan`: proves all checks again and increments the public revision.
 - `revokePlan`: proves knowledge of the local secret and marks the seal revoked.
-
-## Documentation
-
-- [Product proposal](docs/product-proposal.md)
-- [Architecture and privacy boundary](docs/architecture.md)
-- [Local setup](docs/setup.md)
-- [User guide](docs/usage.md)
-- [Launch cohort and verification record](docs/launch-cohort.md)
-- [Feedback loop](docs/feedback-loop.md)
-- [Judge-facing submission checklist](docs/submission-checklist.md)
-- [Midnight documentation](https://docs.midnight.network/)
-
-## Demo
-
-- [Open the official live Kinproof DApp](https://kinproof-web.vercel.app/)
-- [Open the GitHub Pages mirror](https://arko05roy.github.io/kinproof/)
-- [Watch the Kinproof demo video](https://youtu.be/7b9DmwkY1E8)
 
 ## Launch evidence
 
